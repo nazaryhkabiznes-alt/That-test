@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Простий Месенджер</title>
+
+    <!-- CSS СТИЛІ -->
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .chat-container {
+            width: 100%;
+            max-width: 420px;
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            height: 85vh;
+            overflow: hidden;
+        }
+
+        .chat-header {
+            background: #007bff;
+            color: white;
+            padding: 15px;
+            text-align: center;
+        }
+
+        .connection-panel {
+            background: #e9ecef;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            font-size: 14px;
+        }
+
+        .connection-panel input {
+            padding: 6px 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        .connection-panel button {
+            padding: 6px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        #messages {
+            list-style: none;
+            padding: 15px;
+            flex-grow: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        #messages li {
+            padding: 8px 12px;
+            border-radius: 12px;
+            max-width: 75%;
+            word-wrap: break-word;
+            font-size: 14px;
+        }
+
+        .msg-my {
+            align-self: flex-end;
+            background-color: #007bff;
+            color: white;
+        }
+
+        .msg-other {
+            align-self: flex-start;
+            background-color: #e4e6eb;
+            color: black;
+        }
+
+        .msg-system {
+            align-self: center;
+            background-color: transparent;
+            color: #888;
+            font-size: 12px;
+            font-style: italic;
+        }
+
+        #chat-form {
+            display: flex;
+            padding: 10px;
+            border-top: 1px solid #ddd;
+            background: #fafafa;
+        }
+
+        #message-input {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 20px;
+            outline: none;
+            margin-right: 8px;
+        }
+
+        #send-btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        #send-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+    </style>
+
+    <!-- Бібліотека PeerJS для роботи P2P через WebRTC -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+</head>
+<body>
+
+    <!-- HTML РАЗМІТКА -->
+    <div class="chat-container">
+        <div class="chat-header">
+            <h3>P2P Месенджер</h3>
+        </div>
+
+        <div class="connection-panel">
+            <div><strong>Ваш ID:</strong> <span id="my-id">Завантаження...</span></div>
+            <div style="display: flex; gap: 5px;">
+                <input type="text" id="peer-id-input" placeholder="Введіть ID співрозмовника">
+                <button id="connect-btn">Підключитися</button>
+            </div>
+        </div>
+
+        <ul id="messages"></ul>
+
+        <form id="chat-form">
+            <input id="message-input" autocomplete="off" placeholder="Введіть повідомлення..." disabled required />
+            <button id="send-btn" disabled>Надіслати</button>
+        </form>
+    </div>
+
+    <!-- JAVASCRIPT ЛОГІКА -->
+    <script>
+        const peer = new Peer(); // Створюємо P2P з'єднання
+        let conn = null;
+
+        const myIdSpan = document.getElementById('my-id');
+        const peerIdInput = document.getElementById('peer-id-input');
+        const connectBtn = document.getElementById('connect-btn');
+        const messagesUl = document.getElementById('messages');
+        const chatForm = document.getElementById('chat-form');
+        const messageInput = document.getElementById('message-input');
+        const sendBtn = document.getElementById('send-btn');
+
+        // Отримання власного ID
+        peer.on('open', (id) => {
+            myIdSpan.textContent = id;
+            addMessage('Ваш ID згенеровано. Передайте його другу.', 'system');
+        });
+
+        // Обробка вхідного підключення від іншого користувача
+        peer.on('connection', (connection) => {
+            conn = connection;
+            setupConnection();
+            addMessage('Співрозмовник підключився до вас!', 'system');
+        });
+
+        // Підключення за введеним ID
+        connectBtn.addEventListener('click', () => {
+            const remoteId = peerIdInput.value.trim();
+            if (remoteId) {
+                conn = peer.connect(remoteId);
+                setupConnection();
+                addMessage('Підключення...', 'system');
+            }
+        });
+
+        // Налаштування слухачів для активного з'єднання
+        function setupConnection() {
+            conn.on('open', () => {
+                addMessage('З\'єднання встановлено. Можна писати!', 'system');
+                messageInput.disabled = false;
+                sendBtn.disabled = false;
+            });
+
+            conn.on('data', (data) => {
+                addMessage(data, 'other');
+            });
+
+            conn.on('close', () => {
+                addMessage('Співрозмовник відключився.', 'system');
+                messageInput.disabled = true;
+                sendBtn.disabled = true;
+            });
+        }
+
+        // Надсилання повідомлення
+        chatForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const text = messageInput.value.trim();
+            if (text && conn) {
+                conn.send(text);
+                addMessage(text, 'my');
+                messageInput.value = '';
+            }
+        });
+
+        // Додавання повідомлень в інтерфейс
+        function addMessage(text, type) {
+            const li = document.createElement('li');
+            li.textContent = text;
+            li.classList.add(`msg-${type}`);
+            messagesUl.appendChild(li);
+            messagesUl.scrollTop = messagesUl.scrollHeight;
+        }
+    </script>
+</body>
+</html>
